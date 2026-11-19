@@ -1,0 +1,271 @@
+DROP DATABASE modulo_compras;
+CREATE DATABASE modulo_compras;
+USE modulo_compras;
+
+-- ============================================================================
+-- SCRIPT DE CREACION DE RELACIONES (MYSQL)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS `MARCAS` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`nombre` VARCHAR(100) NOT NULL UNIQUE,
+	PRIMARY KEY(`id`)
+);
+
+
+CREATE TABLE IF NOT EXISTS `TIPOS_DE_PRODUCTOS` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`descripcion` VARCHAR(255) NOT NULL UNIQUE,
+	PRIMARY KEY(`id`)
+);
+
+
+CREATE TABLE IF NOT EXISTS `PRODUCTOS` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`descripcion` VARCHAR(255) NOT NULL UNIQUE,
+	`id_marca` INTEGER UNSIGNED NOT NULL,
+	`id_tipo` INTEGER UNSIGNED NOT NULL,
+	`ultimo_costo_unitario` NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+	`porcentaje_iva` NUMERIC(5,2) NOT NULL DEFAULT 10.00 COMMENT '0% = exenta, 10% default',
+	PRIMARY KEY(`id`),
+	CONSTRAINT chk_ult_cost_unit_positivo CHECK (ultimo_costo_unitario >= 0.00),
+	CONSTRAINT chk_porc_iva_valido CHECK (porcentaje_iva IN (0.00, 5.00, 10.00))
+);
+
+
+CREATE TABLE IF NOT EXISTS `PROVEEDORES` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`ruc` VARCHAR(20) NOT NULL UNIQUE,
+	`nombre_razon_social` VARCHAR(200) NOT NULL,
+	`direccion` TEXT(65535),
+	`telefono` VARCHAR(30),
+	`correo` VARCHAR(100),
+	`linea_credito` NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+	`saldo_linea_credito` NUMERIC(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Este campo depende de las ordenes de pago, asi como saldo_factura de COMPRAS_CABECERA',
+	PRIMARY KEY(`id`),
+    CONSTRAINT chk_ln_cr_positivo CHECK (linea_credito >= 0.00),
+	CONSTRAINT chk_sld_ln_cr_positivo CHECK (saldo_linea_credito >= 0.00),
+	CONSTRAINT chk_sld_no_mayor_ln CHECK (saldo_linea_credito <= linea_credito)
+);
+
+
+CREATE TABLE IF NOT EXISTS `DEPOSITOS` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`nombre` VARCHAR(100) NOT NULL UNIQUE,
+	PRIMARY KEY(`id`)
+);
+
+
+CREATE TABLE IF NOT EXISTS `STOCK_DEPOSITO` (
+	`id_deposito` INTEGER UNSIGNED NOT NULL,
+	`id_producto` INTEGER UNSIGNED NOT NULL,
+	`cantidad` NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+	PRIMARY KEY(`id_deposito`, `id_producto`),
+	CONSTRAINT chk_cantidad_positivo_sd CHECK (cantidad >= 0.00)
+);
+
+
+CREATE TABLE IF NOT EXISTS `USUARIOS` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`cedula` NUMERIC(8) NOT NULL UNIQUE,
+	`nombre` VARCHAR(150) NOT NULL,
+	`correo` VARCHAR(100) NOT NULL UNIQUE,
+	`id_rol` INTEGER UNSIGNED NOT NULL,
+	`activo` BOOLEAN NOT NULL COMMENT 'Activo (true) o Inactivo (false)',
+	PRIMARY KEY(`id`)
+);
+
+
+CREATE TABLE IF NOT EXISTS `ROLES` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`nombre` VARCHAR(50) NOT NULL UNIQUE,
+	`descripcion` VARCHAR(255) NOT NULL COMMENT 'Lo que puede y/o no puede hacer este rol.',
+	PRIMARY KEY(`id`)
+);
+
+
+CREATE TABLE IF NOT EXISTS `COMPRAS_CABECERA` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`numero_factura` VARCHAR(20) NOT NULL,
+	`timbrado` NUMERIC(20) NOT NULL,
+	`id_proveedor` INTEGER UNSIGNED NOT NULL,
+	`fecha_compra` DATE NOT NULL,
+	`fecha_vencimiento` DATE NOT NULL,
+	`a_credito` BOOLEAN NOT NULL COMMENT 'true = a credito false = a contado',
+	`id_deposito_ingreso` INTEGER UNSIGNED NOT NULL,
+	`monto_total` DECIMAL(15,2) NOT NULL,
+	`saldo_factura` DECIMAL(15,2) NOT NULL COMMENT 'Si a_cretido es "false" entonces saldo=0. Si es "true" saldo=monto',
+	`id_estado` INTEGER UNSIGNED NOT NULL,
+	PRIMARY KEY(`id`),
+	CONSTRAINT uq_factura_proveedor UNIQUE (id_proveedor, timbrado, numero_factura), -- agregado 30 de octubre
+	CONSTRAINT chk_fch_venc_coherente CHECK (fecha_vencimiento >= fecha_compra),
+	CONSTRAINT chk_monto_tot_positivo CHECK (monto_total >= 0.00),
+	CONSTRAINT chk_saldo_fact_positivo CHECK (saldo_factura >= 0.00),
+	CONSTRAINT chk_saldo_no_mayor_monto CHECK (saldo_factura <= monto_total)
+);
+
+
+CREATE TABLE IF NOT EXISTS `COMPRAS_DETALLE` (
+	`id_detalle` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`id_compra` INTEGER UNSIGNED NOT NULL,
+	`id_producto` INTEGER UNSIGNED NOT NULL,
+	`cantidad` NUMERIC(12,2) NOT NULL,
+	`costo_unitario` NUMERIC(12,2) NOT NULL,
+	`porcentaje_iva` NUMERIC(5,2) NOT NULL,
+	`subtotal` NUMERIC(15,2) NOT NULL,
+	PRIMARY KEY(`id_detalle`),
+	CONSTRAINT uq_compra_producto UNIQUE (id_compra, id_producto),
+	CONSTRAINT chk_cantidad_positivo_cd CHECK (cantidad > 0.00),
+	CONSTRAINT chk_costo_unit_positivo CHECK (costo_unitario > 0.00), -- modificado 1 de noviembre
+	CONSTRAINT chk_porc_iva_positivo CHECK (porcentaje_iva >= 0.00),
+	CONSTRAINT chk_subtotal CHECK (subtotal > 0.00) -- modificado 3 de noviembre
+);
+
+
+CREATE TABLE IF NOT EXISTS `ESTADOS_DE_FACTURA` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`descripcion` VARCHAR(30) NOT NULL COMMENT ' "PENDIENTE", "PAGADA", "VENCIDA", "ANULADA" ',
+	PRIMARY KEY(`id`)
+);
+
+
+CREATE TABLE IF NOT EXISTS `TRANSFERENCIAS_CABECERA` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`fecha` DATE NOT NULL,
+	`id_deposito_origen` INTEGER UNSIGNED NOT NULL,
+	`id_deposito_destino` INTEGER UNSIGNED NOT NULL,
+	`id_usuario_encargado` INTEGER UNSIGNED NOT NULL,
+	`id_usuario_autorizante` INTEGER UNSIGNED NOT NULL,
+	PRIMARY KEY(`id`),
+);
+
+
+CREATE TABLE IF NOT EXISTS `TRANSFERENCIAS_DETALLE` (
+	`id_detalle` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`id_transferencia` INTEGER UNSIGNED NOT NULL,
+	`id_producto` INTEGER UNSIGNED NOT NULL,
+	`cantidad` NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+	PRIMARY KEY(`id_detalle`),
+	CONSTRAINT chk_cantidad_positivo_td CHECK (cantidad > 0.00),
+	CONSTRAINT chk_prod_unico_p_transf UNIQUE (id_transferencia, id_producto) -- agregado 19 nov
+);
+
+
+CREATE TABLE IF NOT EXISTS `ORDENES_DE_PAGO` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`id_proveedor` INTEGER UNSIGNED NOT NULL,
+	`fecha` DATE NOT NULL,
+	`monto_total` DECIMAL(15,2) NOT NULL,
+	`confirmado` BOOLEAN NOT NULL DEFAULT FALSE,
+	PRIMARY KEY(`id`),
+	CONSTRAINT chk_mnt_tot_positivo CHECK (monto_total >= 0.00)
+);
+
+
+CREATE TABLE IF NOT EXISTS `ORDEN_DE_PAGO_FACTURAS` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`id_orden_de_pago` INTEGER UNSIGNED NOT NULL,
+	`id_compra` INTEGER UNSIGNED NOT NULL,
+	`monto_pagado` DECIMAL(15,2) NOT NULL,
+	PRIMARY KEY(`id`),
+	CONSTRAINT chk_mnt_pag_fac_positivo CHECK (monto_pagado > 0.00),
+	CONSTRAINT chk_fac_unica_p_orden UNIQUE (id_orden_de_pago, id_compra)
+);
+
+
+CREATE TABLE IF NOT EXISTS `ORDEN_DE_PAGO_FORMAS` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`id_orden_de_pago` INTEGER UNSIGNED NOT NULL,
+	`id_forma_de_pago` INTEGER UNSIGNED NOT NULL,
+	`monto_pagado` DECIMAL(15,2) NOT NULL,
+	`referencia` VARCHAR(100) COMMENT 'nro de cheque, nro de transferencia, etc.', -- pasado a nullable 14 nov
+	PRIMARY KEY(`id`),
+	CONSTRAINT chk_mnt_pag_form_positivo CHECK (monto_pagado > 0.00)
+);
+
+
+CREATE TABLE IF NOT EXISTS `FORMAS_DE_PAGO` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`descripcion` VARCHAR(100) NOT NULL,
+	PRIMARY KEY(`id`)
+);
+
+
+CREATE TABLE IF NOT EXISTS `BITACORA` (
+	`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,
+	`nombre_tabla` VARCHAR(100) NOT NULL COMMENT 'tabla en la que se realiza el evento',
+	`operacion` VARCHAR(255) NOT NULL COMMENT 'insert, update, delete',
+	`id_usuario` INTEGER UNSIGNED NOT NULL COMMENT 'el que lo realiza',
+	`fecha_hora` DATETIME NOT NULL COMMENT 'momento en el que sucede',
+	`datos_anteriores` JSON COMMENT 'estado de fila antes del cambio',
+	`datos_nuevos` JSON COMMENT 'estado de fila luego del cambio',
+	PRIMARY KEY(`id`)
+);
+
+
+ALTER TABLE `PRODUCTOS`
+ADD FOREIGN KEY(`id_marca`) REFERENCES `MARCAS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `PRODUCTOS`
+ADD FOREIGN KEY(`id_tipo`) REFERENCES `TIPOS_DE_PRODUCTOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `STOCK_DEPOSITO`
+ADD FOREIGN KEY(`id_deposito`) REFERENCES `DEPOSITOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `STOCK_DEPOSITO`
+ADD FOREIGN KEY(`id_producto`) REFERENCES `PRODUCTOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `USUARIOS`
+ADD FOREIGN KEY(`id_rol`) REFERENCES `ROLES`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `TRANSFERENCIAS_DETALLE`
+ADD FOREIGN KEY(`id_transferencia`) REFERENCES `TRANSFERENCIAS_CABECERA`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `TRANSFERENCIAS_DETALLE`
+ADD FOREIGN KEY(`id_producto`) REFERENCES `PRODUCTOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `TRANSFERENCIAS_CABECERA`
+ADD FOREIGN KEY(`id_deposito_origen`) REFERENCES `DEPOSITOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `TRANSFERENCIAS_CABECERA`
+ADD FOREIGN KEY(`id_deposito_destino`) REFERENCES `DEPOSITOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `TRANSFERENCIAS_CABECERA`
+ADD FOREIGN KEY(`id_usuario_encargado`) REFERENCES `USUARIOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `TRANSFERENCIAS_CABECERA`
+ADD FOREIGN KEY(`id_usuario_autorizante`) REFERENCES `USUARIOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `COMPRAS_CABECERA`
+ADD FOREIGN KEY(`id_proveedor`) REFERENCES `PROVEEDORES`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `COMPRAS_CABECERA`
+ADD FOREIGN KEY(`id_deposito_ingreso`) REFERENCES `DEPOSITOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `COMPRAS_DETALLE`
+ADD FOREIGN KEY(`id_compra`) REFERENCES `COMPRAS_CABECERA`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `COMPRAS_DETALLE`
+ADD FOREIGN KEY(`id_producto`) REFERENCES `PRODUCTOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `COMPRAS_CABECERA`
+ADD FOREIGN KEY(`id_estado`) REFERENCES `ESTADOS_DE_FACTURA`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `ORDENES_DE_PAGO`
+ADD FOREIGN KEY(`id_proveedor`) REFERENCES `PROVEEDORES`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `ORDEN_DE_PAGO_FACTURAS`
+ADD FOREIGN KEY(`id_orden_de_pago`) REFERENCES `ORDENES_DE_PAGO`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `ORDEN_DE_PAGO_FACTURAS`
+ADD FOREIGN KEY(`id_compra`) REFERENCES `COMPRAS_CABECERA`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `ORDEN_DE_PAGO_FORMAS`
+ADD FOREIGN KEY(`id_orden_de_pago`) REFERENCES `ORDENES_DE_PAGO`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `ORDEN_DE_PAGO_FORMAS`
+ADD FOREIGN KEY(`id_forma_de_pago`) REFERENCES `FORMAS_DE_PAGO`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `BITACORA`
+ADD FOREIGN KEY(`id_usuario`) REFERENCES `USUARIOS`(`id`)
+ON UPDATE RESTRICT ON DELETE RESTRICT;
