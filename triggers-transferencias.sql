@@ -68,7 +68,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'TRANSFERENCIAS_CABECERA', 'INSERT', 1, NOW(),
+        'TRANSFERENCIAS_CABECERA', 'INSERT', 3, NOW(),
         JSON_OBJECT('NULL', null),
         JSON_OBJECT('id',                     NEW.id,
                     'fecha',                  NEW.fecha, -- modif 19 nov (NOW() -> NEW.fecha)
@@ -150,7 +150,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'TRANSFERENCIAS_CABECERA', 'UPDATE', 1, NOW(),
+        'TRANSFERENCIAS_CABECERA', 'UPDATE', 3, NOW(),
         JSON_OBJECT('id',                     OLD.id,
                     'fecha',                  OLD.fecha, -- modif 19 nov (NOW() -> NEW.fecha)
                     'id_deposito_origen',     OLD.id_deposito_origen,
@@ -192,7 +192,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'TRANSFERENCIAS_CABECERA', 'DELETE', 1, NOW(),
+        'TRANSFERENCIAS_CABECERA', 'DELETE', 3, NOW(),
         JSON_OBJECT('id',                     OLD.id,
                     'fecha',                  OLD.fecha, -- modif 19 nov (NOW() -> NEW.fecha)
                     'id_deposito_origen',     OLD.id_deposito_origen,
@@ -262,7 +262,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'TRANSFERENCIAS_DETALLE', 'INSERT', 1, NOW(),
+        'TRANSFERENCIAS_DETALLE', 'INSERT', 3, NOW(),
         JSON_OBJECT('NULL', null),
         JSON_OBJECT('id_detalle',       NEW.id_detalle,
                     'id_transferencia', NEW.id_transferencia,
@@ -349,7 +349,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'TRANSFERENCIAS_DETALLE', 'UPDATE', 1, NOW(),
+        'TRANSFERENCIAS_DETALLE', 'UPDATE', 3, NOW(),
         JSON_OBJECT('id_detalle',       OLD.id_detalle,
                     'id_transferencia', OLD.id_transferencia,
                     'id_producto',      OLD.id_producto,
@@ -414,7 +414,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'TRANSFERENCIAS_DETALLE', 'DELETE', 1, NOW(),
+        'TRANSFERENCIAS_DETALLE', 'DELETE', 3, NOW(),
         JSON_OBJECT('id_detalle',       OLD.id_detalle,
                     'id_transferencia', OLD.id_transferencia,
                     'id_producto',      OLD.id_producto,

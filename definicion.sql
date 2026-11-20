@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS `TRANSFERENCIAS_CABECERA` (
 	`id_deposito_destino` INTEGER UNSIGNED NOT NULL,
 	`id_usuario_encargado` INTEGER UNSIGNED NOT NULL,
 	`id_usuario_autorizante` INTEGER UNSIGNED NOT NULL,
-	PRIMARY KEY(`id`),
+	PRIMARY KEY(`id`)
 );
 
 
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS `ORDENES_DE_PAGO` (
 	`id_proveedor` INTEGER UNSIGNED NOT NULL,
 	`fecha` DATE NOT NULL,
 	`monto_total` DECIMAL(15,2) NOT NULL,
-	`confirmado` BOOLEAN NOT NULL DEFAULT FALSE,
+	`confirmado` BOOLEAN NOT NULL DEFAULT FALSE, -- modif 18 nov
 	PRIMARY KEY(`id`),
 	CONSTRAINT chk_mnt_tot_positivo CHECK (monto_total >= 0.00)
 );

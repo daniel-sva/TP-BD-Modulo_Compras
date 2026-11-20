@@ -8,7 +8,7 @@ USE modulo_compras;
   1. Facturas de Proveedores Vencidas
 */
 -- --------------------------------------------------------------------------------
-CREATE OR REPLACE VIEW VISTA_FACTURAS_PROVEEDORES_VENCIDAS ASProductosNoCompradosEntreFechas
+CREATE OR REPLACE VIEW VISTA_FACTURAS_PROVEEDORES_VENCIDAS AS
 SELECT 
     ca.id AS codigo_compra,
     ca.numero_factura AS nro_factura,
@@ -23,7 +23,7 @@ SELECT
 FROM COMPRAS_CABECERA ca
 INNER JOIN PROVEEDORES pr ON ca.id_proveedor = pr.id
 INNER JOIN ESTADOS_DE_FACTURA est ON ca.id_estado = est.id
-WHERE ca.id_estado = 3 OR (ca.saldo_factura > 0 AND ca.fecha_vencimiento < '2026-10-01');
+WHERE ca.id_estado = 3 OR (ca.saldo_factura > 0 AND ca.fecha_vencimiento < CURDATE());
 
 -- Ejecutar vista
 SELECT * FROM VISTA_FACTURAS_PROVEEDORES_VENCIDAS;

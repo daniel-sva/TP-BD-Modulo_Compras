@@ -18,6 +18,7 @@ SELECT
 FROM COMPRAS_CABECERA c
 INNER JOIN DEPOSITOS d ON c.id_deposito_ingreso = d.id
 WHERE c.fecha_compra BETWEEN '2026-09-05' AND '2026-09-15'
+  AND c.id_estado <> 4
 GROUP BY c.fecha_compra, d.id, d.nombre
 ORDER BY c.fecha_compra ASC;
 
@@ -41,6 +42,7 @@ WHERE
   pr.id BETWEEN 1 AND 5
   AND
   c.fecha_compra BETWEEN '2026-09-01' AND '2026-09-30'
+  AND c.id_estado <> 4
 GROUP BY pr.id, pr.nombre_razon_social, p.id, p.descripcion, p.ultimo_costo_unitario
 ORDER BY pr.id, p.id;
 
@@ -65,11 +67,12 @@ WHERE
         COMPRAS_DETALLE cd_sub
         INNER JOIN COMPRAS_CABECERA c_sub ON cd_sub.id_compra = c_sub.id
       WHERE c_sub.id_proveedor BETWEEN 1 AND 5
+        AND c_sub.id_estado <> 4
       GROUP BY cd_sub.id_producto
       HAVING COUNT(DISTINCT c_sub.id_proveedor) > 1
   )
-  AND
-  pr.id BETWEEN 1 AND 5
+  AND pr.id BETWEEN 1 AND 5
+  AND c.id_estado <> 4
 GROUP BY p.id, p.descripcion, pr.id, pr.nombre_razon_social;
 
 -- --------------------------------------------------------------------------------
@@ -100,7 +103,9 @@ SELECT
   SUM(cd.cantidad) AS cantidad_total_comprada
 FROM
   COMPRAS_DETALLE cd
-  INNER JOIN Productos p ON cd.id_producto = p.id
+  INNER JOIN PRODUCTOS p ON cd.id_producto = p.id
+  INNER JOIN COMPRAS_CABECERA c ON cd.id_compra = c.id
+WHERE c.id_estado <> 4
 GROUP BY p.id, p.descripcion
 ORDER BY cantidad_total_comprada DESC;
 
@@ -117,6 +122,7 @@ SELECT
 FROM 
   COMPRAS_CABECERA C
   INNER JOIN PROVEEDORES pr ON c.id_proveedor = pr.id
+WHERE c.id_estado <> 4
 GROUP BY pr.id, pr.nombre_razon_social
 ORDER BY total_facturado DESC;
 
@@ -134,33 +140,48 @@ CREATE PROCEDURE ProductosNoCompradosEntreFechas(
   IN fecha_final DATE
 )
 BEGIN
-  SELECT
-    p.id AS codigo_producto,
-    p.descripcion AS descripcion_producto,
-    -- Recupera el costo unitario de la ultima compra registrada
-    p.ultimo_costo_unitario AS precio_ultima_compra,
-    -- Recupera la fecha de la ultima compra registrada (NULL si jamas se compro)
-    (
-      SELECT DATE_FORMAT(MAX(c.fecha_compra), '%d/%m/%Y')
+  IF fecha_inicial IS NULL OR fecha_final IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: Debe especificar tanto la fecha inicial como la fecha final.';
+    END IF;
+
+    IF fecha_inicial > fecha_final THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: La fecha inicial no puede ser posterior a la fecha final.';
+    END IF;
+
+    SELECT
+      p.id AS codigo_producto,
+      p.descripcion AS descripcion_producto,
+      -- Recupera el costo unitario de la ultima compra registrada
+      p.ultimo_costo_unitario AS precio_ultima_compra,
+      -- Recupera la fecha de la ultima compra registrada ('Sin Compras' si jamas se compro)
+      COALESCE(
+        (
+          SELECT DATE_FORMAT(MAX(c.fecha_compra), '%d/%m/%Y')
+          FROM COMPRAS_DETALLE cd
+          INNER JOIN COMPRAS_CABECERA c ON c.id = cd.id_compra
+          WHERE cd.id_producto = p.id AND c.id_estado <> 4
+        ),
+        'Sin Compras'
+       ) AS ultima_fecha_compra
+    FROM PRODUCTOS p
+    WHERE NOT EXISTS (
+      SELECT 1
       FROM COMPRAS_DETALLE cd
       INNER JOIN COMPRAS_CABECERA c ON c.id = cd.id_compra
       WHERE cd.id_producto = p.id
-    ) AS ultima_fecha_compra
-  FROM PRODUCTOS p
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM COMPRAS_DETALLE cd
-    INNER JOIN COMPRAS_CABECERA c ON c.id = cd.id_compra
-    WHERE cd.id_producto = p.id
-      AND c.fecha_compra BETWEEN fecha_inicial AND fecha_final
-  );
+        AND c.id_estado <> 4 
+        AND c.fecha_compra BETWEEN fecha_inicial AND fecha_final
+    );
 END //
 DELIMITER ;
 
 CALL ProductosNoCompradosEntreFechas('2026-09-10', '2026-09-16');
 
+/*
 DELIMITER //
-/* ABM para consulta de productos no comprados entre fechas*/
+-- ABM para consulta de productos no comprados entre fechas
 DROP PROCEDURE IF EXISTS productos_no_comprados_entre_fechas //
 
 CREATE PROCEDURE productos_no_comprados_entre_fechas(
@@ -175,4 +196,4 @@ BEGIN
   GROUP BY p.id
   HAVING SUM(CASE WHEN cc.fecha BETWEEN fecha1 AND fecha2 THEN 1 ELSE 0 END) = 0;
 END //
-DELIMITER ;
+DELIMITER ;*/

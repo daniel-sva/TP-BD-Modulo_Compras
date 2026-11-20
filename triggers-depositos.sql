@@ -32,7 +32,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'DEPOSITOS', 'INSERT', 1, NOW(),
+        'DEPOSITOS', 'INSERT', 3, NOW(),
         JSON_OBJECT('NULL', null),
         JSON_OBJECT('id',     NEW.id,
                     'nombre', NEW.nombre)
@@ -65,7 +65,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'DEPOSITOS', 'UPDATE', 1, NOW(),
+        'DEPOSITOS', 'UPDATE', 3, NOW(),
         JSON_OBJECT('id',     OLD.id,
                     'nombre', OLD.nombre),
         JSON_OBJECT('id',     NEW.id,
@@ -86,7 +86,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'DEPOSITOS', 'DELETE', 1, NOW(),
+        'DEPOSITOS', 'DELETE', 3, NOW(),
         JSON_OBJECT('id',     OLD.id,
                     'nombre', OLD.nombre),
         JSON_OBJECT('NULL', null)
@@ -128,7 +128,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'STOCK_DEPOSITO', 'INSERT', 1, NOW(),
+        'STOCK_DEPOSITO', 'INSERT', 3, NOW(),
         JSON_OBJECT('NULL', null),
         JSON_OBJECT('id_deposito', NEW.id_deposito,
                     'id_producto', NEW.id_producto,
@@ -168,7 +168,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'STOCK_DEPOSITO', 'UPDATE', 1, NOW(),
+        'STOCK_DEPOSITO', 'UPDATE', 3, NOW(),
         JSON_OBJECT('id_deposito', OLD.id_deposito,
                     'id_producto', OLD.id_producto,
                     'cantidad',    OLD.cantidad),
@@ -207,7 +207,7 @@ BEGIN
     INSERT INTO BITACORA (
         nombre_tabla, operacion, id_usuario, fecha_hora, datos_anteriores, datos_nuevos
     ) VALUES (
-        'STOCK_DEPOSITO', 'DELETE', 1, NOW(),
+        'STOCK_DEPOSITO', 'DELETE', 3, NOW(),
         JSON_OBJECT('id_deposito', OLD.id_deposito,
                     'id_producto', OLD.id_producto,
                     'cantidad',    OLD.cantidad),

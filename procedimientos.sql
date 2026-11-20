@@ -1,8 +1,8 @@
 USE modulo_compras;
 -- ============================================================================
--- SCRIPT DE PROCEDIMIENTOS ALMACENADOS (MYSQL)
+-- SCRIPT DE PROCEDIMIENTOS ALMACENADOS
 -- ============================================================================
-DELIMITER //
+
 -- --------------------------------------------------------------------------------
 /* 
   1. Para dar alta/baja/modificación de una tabla simple (proveedores, productos,
@@ -10,76 +10,126 @@ DELIMITER //
 */
 -- --------------------------------------------------------------------------------
 
-
--- ABM Proveedores
--- VERIFICAR QUE EL PROVEEDOR NO TENGA FACTURAS A SU NOMBRE ANTES DE ELIMINARLO. CASCADE ENVES DE RESTRICT AL INTENTAR DELETE DE CLAVE
+DELIMITER //
+/*
+    PROCEDIMIENTO ABM SIMPLE: PROVEEDORES
+    - Gestiona Alta (INSERT), Baja (DELETE) y Modificación (UPDATE) de proveedores.
+    - Inicializa automáticamente saldo_linea_credito en el alta y lo recalcula proporcionalmente en modificaciones.
+    - Protegido mediante transacción y manejador de excepciones SQL.
+*/
 DROP PROCEDURE IF EXISTS sp_abm_proveedor //
-
 CREATE PROCEDURE sp_abm_proveedor(
-    IN p_operacion VARCHAR(10),
-    IN p_id INT,
-    IN p_ruc VARCHAR(20),
-    IN p_nombre VARCHAR(200),
-    IN p_direccion TEXT,
-    IN p_telefono VARCHAR(30),
-    IN p_correo VARCHAR(100),
-    IN p_linea_credito DECIMAL(15,2)
+    IN p_operacion VARCHAR(10),      -- INSERT          UPDATE          DELETE
+    IN p_id INT UNSIGNED,            -- Nulo/Ignorado   Requerido       Requerido
+    IN p_ruc VARCHAR(20),            -- Requerido       Requerido       Nulo/Ignorado
+    IN p_nombre VARCHAR(200),        -- Requerido       Requerido       Nulo/Ignorado
+    IN p_direccion TEXT,             -- Opcional        Opcional        Nulo/Ignorado
+    IN p_telefono VARCHAR(30),       -- Opcional        Opcional        Nulo/Ignorado
+    IN p_correo VARCHAR(100),        -- Opcional        Opcional        Nulo/Ignorado
+    IN p_linea_credito DECIMAL(15,2) -- Requerido       Requerido       Nulo/Ignorado
 )
 BEGIN
-    -- Variables para almacenar los valores actuales antes del UPDATE
+    DECLARE v_op VARCHAR(10);
+    DECLARE v_existe INT DEFAULT 0;
     DECLARE v_linea_actual DECIMAL(15,2);
     DECLARE v_saldo_actual DECIMAL(15,2);
     DECLARE v_nuevo_saldo DECIMAL(15,2);
-    
     DECLARE v_msg VARCHAR(255);
 
-    IF p_operacion = 'INSERT' THEN
+    SET v_op = UPPER(TRIM(COALESCE(p_operacion, '')));
+
+    IF v_op = 'INSERT' THEN
+        IF TRIM(COALESCE(p_ruc, '')) = '' OR TRIM(COALESCE(p_nombre, '')) = '' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: El RUC y el nombre o razón social son obligatorios para registrar un proveedor.';
+        END IF;
+
+        SET p_linea_credito = COALESCE(p_linea_credito, 0.00);
+        IF p_linea_credito < 0.00 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: La línea de crédito no puede ser negativa.';
+        END IF;
+
         INSERT INTO PROVEEDORES (
             ruc, nombre_razon_social, direccion, telefono, correo, linea_credito, saldo_linea_credito
         ) VALUES (
-            p_ruc, p_nombre, p_direccion, p_telefono, p_correo, p_linea_credito, p_linea_credito
+            TRIM(p_ruc),
+            TRIM(p_nombre),
+            NULLIF(TRIM(p_direccion), ''),
+            NULLIF(TRIM(p_telefono), ''),
+            NULLIF(TRIM(p_correo), ''),
+            p_linea_credito,
+            p_linea_credito
         );
 
-    ELSEIF p_operacion = 'UPDATE' THEN
-        -- Obtener los valores actuales del proveedor
-        SELECT linea_credito, saldo_linea_credito 
-        INTO v_linea_actual, v_saldo_actual
-        FROM PROVEEDORES 
-        WHERE id = p_id;
-
-        -- Calcular el nuevo saldo basado en la diferencia de la linea
-        IF p_linea_credito <> v_linea_actual THEN
-            SET v_nuevo_saldo = v_saldo_actual + (p_linea_credito - v_linea_actual);
-        ELSE
-            SET v_nuevo_saldo = v_saldo_actual;
+    ELSEIF v_op = 'UPDATE' THEN
+        IF p_id IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: Debe especificar el ID del proveedor a modificar.';
         END IF;
 
-        -- Validar que el saldo no sea negativo
-        IF v_nuevo_saldo < 0 THEN
-            SET v_msg = CONCAT('Operacion invalida: La reducción de la línea de crédito a Gs.', p_linea_credito, ' dejaría el saldo en negativo.');
+        SELECT COUNT(*) INTO v_existe FROM PROVEEDORES WHERE id = p_id;
+        IF v_existe = 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: El proveedor especificado no existe.';
+        END IF;
+
+        IF TRIM(COALESCE(p_ruc, '')) = '' OR TRIM(COALESCE(p_nombre, '')) = '' THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: El RUC y el nombre o razón social no pueden quedar vacíos.';
+        END IF;
+
+        SELECT linea_credito, saldo_linea_credito
+        INTO v_linea_actual, v_saldo_actual
+        FROM PROVEEDORES
+        WHERE id = p_id;
+
+        SET p_linea_credito = COALESCE(p_linea_credito, v_linea_actual);
+        IF p_linea_credito < 0.00 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: La línea de crédito no puede ser negativa.';
+        END IF;
+
+        -- ajustar el saldo disponible manteniendo la deuda actual con el provedor
+        SET v_nuevo_saldo = v_saldo_actual + (p_linea_credito - v_linea_actual);
+
+        IF v_nuevo_saldo < 0.00 THEN
+            SET v_msg = CONCAT('Operación inválida: Reducir la línea de crédito a Gs. ', p_linea_credito, ' dejaría el saldo disponible en negativo.');
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
         END IF;
 
-        -- Ejecutar la actualizacion segura
         UPDATE PROVEEDORES
-        SET ruc = p_ruc,
-            nombre_razon_social = p_nombre,
-            direccion = p_direccion,
-            telefono = p_telefono,
-            correo = p_correo,
-            saldo_linea_credito = v_nuevo_saldo,
-            linea_credito = p_linea_credito
+        SET ruc                 = TRIM(p_ruc),
+            nombre_razon_social = TRIM(p_nombre),
+            direccion           = NULLIF(TRIM(p_direccion), ''),
+            telefono            = NULLIF(TRIM(p_telefono), ''),
+            correo              = NULLIF(TRIM(p_correo), ''),
+            linea_credito       = p_linea_credito,
+            saldo_linea_credito = v_nuevo_saldo
         WHERE id = p_id;
 
-    ELSEIF p_operacion = 'DELETE' THEN
-        
+    ELSEIF v_op = 'DELETE' THEN
+        IF p_id IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: Debe especificar el ID del proveedor a eliminar.';
+        END IF;
+
+        SELECT COUNT(*) INTO v_existe FROM PROVEEDORES WHERE id = p_id;
+        IF v_existe = 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: El proveedor especificado no existe.';
+        END IF;
+
+        -- Se bloquea por el constraint ON DELETE RESTRICT si tiene compras u órdenes de pago asociadas
         DELETE FROM PROVEEDORES WHERE id = p_id;
 
     ELSE
-        SET v_msg = CONCAT('Operacion invalida: ', p_operacion);
+        SET v_msg = CONCAT('Operación inválida: "', COALESCE(p_operacion, 'NULL'), '". Use INSERT, UPDATE o DELETE.');
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
     END IF;
 END //
+DELIMITER ;
+
 
 -- --------------------------------------------------------------------------------
 /* 
@@ -88,220 +138,197 @@ END //
 */
 -- --------------------------------------------------------------------------------
 
--- ABM Compras
-
 DELIMITER //
-
+/*
+    PROCEDIMIENTO ABM CABECERA-DETALLE: COMPRAS_CABECERA y COMPRAS_DETALLE
+    - INSERT: Crea una compra nueva con N detalles (p_id_compra IS NULL) o agrega detalles a una compra existente (p_id_compra IS NOT NULL).
+    - UPDATE: Modifica cantidad y/o costo_unitario de los detalles indicados en p_detalles_json para p_id_compra.
+    - DELETE: Si p_detalles_json es NULL, realiza borrado lógico (anulación: id_estado = 4) de la cabecera;
+              si p_detalles_json contiene productos, elimina físicamente esos detalles.
+    - Todas las reglas de cálculo, stock, línea de crédito y auditoría son ejecutadas por los triggers.
+*/
 DROP PROCEDURE IF EXISTS sp_abm_compras //
 CREATE PROCEDURE sp_abm_compras(
-    IN p_operacion          VARCHAR(10),   -- 'INSERT', 'UPDATE', 'ANULAR'
-    IN p_id_compra          INT,           --  para UPDATE y ANULAR
-    IN p_id_usuario         INT,
-    IN p_numero_factura     VARCHAR(20),
-    IN p_timbrado           NUMERIC(20),
-    IN p_id_proveedor       INT,
-    IN p_fecha_compra       DATE,
-    IN p_fecha_vencimiento  DATE,
-    IN p_a_credito          BOOLEAN,
-    IN p_id_deposito        INT,
-    -- Datos del detalle 
-    IN p_id_producto        INT,
-    IN p_cantidad           NUMERIC(12,2),
-    IN p_costo_unitario     NUMERIC(12,2),
-    IN p_porcentaje_iva     NUMERIC(5,2)
+    IN p_operacion          VARCHAR(10),   -- INSERT (Nueva)    INSERT (Agreg. Det.)  UPDATE (Det.)     DELETE (Anular / Borrar Det.)
+    IN p_id_compra          INT UNSIGNED,  -- Nulo/Ignorado     Requerido             Requerido         Requerido
+    IN p_numero_factura     VARCHAR(20),   -- Requerido         Nulo/Ignorado         Nulo/Ignorado     Nulo/Ignorado
+    IN p_timbrado           NUMERIC(20),   -- Requerido         Nulo/Ignorado         Nulo/Ignorado     Nulo/Ignorado
+    IN p_id_proveedor       INT UNSIGNED,  -- Requerido         Nulo/Ignorado         Nulo/Ignorado     Nulo/Ignorado
+    IN p_fecha_compra       DATE,          -- Requerido         Nulo/Ignorado         Nulo/Ignorado     Nulo/Ignorado
+    IN p_fecha_vencimiento  DATE,          -- Req. si crédito   Nulo/Ignorado         Nulo/Ignorado     Nulo/Ignorado
+    IN p_a_credito          BOOLEAN,       -- Requerido         Nulo/Ignorado         Nulo/Ignorado     Nulo/Ignorado
+    IN p_id_deposito        INT UNSIGNED,  -- Requerido         Nulo/Ignorado         Nulo/Ignorado     Nulo/Ignorado
+    IN p_detalles_json      JSON           -- Opcional          Requerido             Requerido         Opcional (NULL=Anular)
 )
 BEGIN
-    -- Declaracion variables de control
-    DECLARE v_monto_total      DECIMAL(15,2);
-    DECLARE v_saldo_factura    DECIMAL(15,2);
-    DECLARE v_id_estado        INT;
-    DECLARE v_saldo_disponible DECIMAL(15,2);
-    DECLARE v_stock_actual     NUMERIC(12,2);
-    DECLARE v_id_compra_nuevo  INT;
-    
-    -- Si falla ejecuta ROLLBACK solo
+    DECLARE v_op VARCHAR(10);
+    DECLARE v_existe INT DEFAULT 0;
+    DECLARE v_id_compra_objetivo INT UNSIGNED;
+    DECLARE v_cant_json INT DEFAULT 0;
+    DECLARE v_productos_invalidos INT DEFAULT 0;
+    DECLARE v_total_detalles_actual INT DEFAULT 0;
+    DECLARE v_msg VARCHAR(255);
+
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
         RESIGNAL;
     END;
 
+    SET v_op = UPPER(TRIM(COALESCE(p_operacion, '')));
+    SET v_cant_json = COALESCE(JSON_LENGTH(p_detalles_json), 0);
+
     START TRANSACTION;
 
-    /*------------------------------------------------------------------
-    -- 1. Si es INSERT
-    ------------------------------------------------------------------*/
-    IF p_operacion = 'INSERT' THEN
-        
-        -- 1. Validar si es a credito y si fecha_vencimiento >= fecha_compra
-        IF p_a_credito = TRUE AND p_fecha_vencimiento < p_fecha_compra THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: La fecha de vencimiento no puede ser menor a la fecha de compra.';
-        END IF;
+    -- ========================================================================
+    -- 1. INSERT (Factura completa nueva o nuevos detalles a existente)
+    -- ========================================================================
+    IF v_op = 'INSERT' THEN
+        IF p_id_compra IS NULL THEN -- alta de nueva cabecera + detalles
+            INSERT INTO COMPRAS_CABECERA (
+                numero_factura, timbrado, id_proveedor, fecha_compra, fecha_vencimiento,
+                a_credito, id_deposito_ingreso
+            ) VALUES (
+                p_numero_factura, p_timbrado, p_id_proveedor, p_fecha_compra, p_fecha_vencimiento,
+                p_a_credito, p_id_deposito
+            );
 
-        -- monto total del detalle
-        SET v_monto_total = p_cantidad * p_costo_unitario;
+            SET v_id_compra_objetivo = LAST_INSERT_ID();
 
-        -- 2. Validar que la compra no exceda la linea_credito del proveedor
-        IF p_a_credito = TRUE THEN
-            SELECT saldo_linea_credito INTO v_saldo_disponible 
-            FROM PROVEEDORES WHERE id = p_id_proveedor;
-            
-            IF v_monto_total > v_saldo_disponible THEN
-                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: El monto supera la línea de crédito disponible del proveedor.';
+        ELSE -- agregar nuevos items a una compra ya existente
+            IF v_cant_json = 0 THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Error: Debe proporcionar al menos un producto en p_detalles_json para agregar a la compra.';
             END IF;
-            SET v_id_estado = 1; -- PENDIENTE
-            SET v_saldo_factura = v_monto_total;
-        ELSE
-            SET v_id_estado = 2; -- PAGADA
-            SET v_saldo_factura = 0.00;
+
+            SELECT COUNT(*) INTO v_existe FROM COMPRAS_CABECERA WHERE id = p_id_compra;
+            IF v_existe = 0 THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Error: La compra a la que intenta agregar detalles no existe.';
+            END IF;
+
+            SET v_id_compra_objetivo = p_id_compra;
         END IF;
 
-        -- 3. Insertar COMPRAS_CABECERA
-        INSERT INTO COMPRAS_CABECERA (
-            numero_factura, timbrado, id_proveedor, fecha_compra, fecha_vencimiento, 
-            a_credito, id_deposito_ingreso, monto_total, saldo_factura, id_estado
-        ) VALUES (
-            p_numero_factura, p_timbrado, p_id_proveedor, p_fecha_compra, p_fecha_vencimiento,
-            p_a_credito, p_id_deposito, v_monto_total, v_saldo_factura, v_id_estado
-        );
-
-        SET v_id_compra_nuevo = LAST_INSERT_ID();
-
-        -- 4. Insertar COMPRAS_DETALLE y incrementar STOCK_DEPOSITO
-        INSERT INTO COMPRAS_DETALLE (
-            id_compra, id_producto, cantidad, costo_unitario, porcentaje_iva, subtotal
-        ) VALUES (
-            v_id_compra_nuevo, p_id_producto, p_cantidad, p_costo_unitario, p_porcentaje_iva, v_monto_total
-        );
-
-        -- Incrementar stock en el deposito de ingreso usando la funcion auxiliar
-        CALL sp_actualizar_stock(p_id_deposito, p_id_producto, p_cantidad, 'SUMAR');
-
-        -- 5 y 6. Si es a credito, descontar de PROVEEDORES.saldo_linea_credito
-        IF p_a_credito = TRUE THEN
-            UPDATE PROVEEDORES 
-            SET saldo_linea_credito = saldo_linea_credito - v_monto_total
-            WHERE id = p_id_proveedor;
+        -- insertar detalles solo si se enviaron productos en el JSON
+        IF v_cant_json > 0 THEN
+            INSERT INTO COMPRAS_DETALLE (id_compra, id_producto, cantidad, costo_unitario)
+            SELECT
+                v_id_compra_objetivo,
+                jt.id_producto,
+                jt.cantidad,
+                jt.costo_unitario
+            FROM JSON_TABLE(
+                p_detalles_json,
+                '$[*]' COLUMNS (
+                    id_producto    INT UNSIGNED  PATH '$.id_producto',
+                    cantidad       DECIMAL(12,2) PATH '$.cantidad',
+                    costo_unitario DECIMAL(12,2) PATH '$.costo_unitario'
+                )
+            ) AS jt;
         END IF;
 
-        -- 7. Registrar auditoria en BITACORA !!
-        INSERT INTO BITACORA (nombre_tabla, operacion, id_usuario, fecha_hora, datos_nuevos)
-        VALUES ('COMPRAS_CABECERA', 'INSERT', p_id_usuario, NOW(), 
-                CONCAT('{"id": ', v_id_compra_nuevo, ', "monto": ', v_monto_total, '}'));
-
-
-   /* ------------------------------------------------------------------
-    -- 2. Si es ANULAR
-    ------------------------------------------------------------------*/
-    ELSEIF p_operacion = 'ANULAR' THEN
-        
-        -- 1. Validar que la compra exista y que no esté ya anulada
-        SELECT saldo_factura, monto_total, id_proveedor, a_credito, id_deposito_ingreso, id_estado
-        INTO v_saldo_factura, v_monto_total, p_id_proveedor, p_a_credito, p_id_deposito, v_id_estado
-        FROM COMPRAS_CABECERA WHERE id = p_id_compra;
-
-        IF v_id_estado IS NULL THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: La compra especificada no existe.';
-        END IF;
-        IF v_id_estado = 4 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: La compra ya se encuentra anulada.';
+    -- ========================================================================
+    -- 2. UPDATE (Modificación de cantidad/costo en detalles existentes)
+    -- ========================================================================
+    ELSEIF v_op = 'UPDATE' THEN
+        IF p_id_compra IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: Debe indicar p_id_compra para modificar sus detalles.';
         END IF;
 
-        -- 2. Validar que saldo_factura == monto_total (sin pagos aplicados)
-        IF p_a_credito = TRUE AND v_saldo_factura < v_monto_total THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: No se puede anular porque ya registra pagos.';
+        SELECT COUNT(*) INTO v_existe FROM COMPRAS_CABECERA WHERE id = p_id_compra;
+        IF v_existe = 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: La compra especificada no existe.';
         END IF;
 
-        -- Obtener producto y cantidad para validar y revertir stock
-        SELECT id_producto, cantidad INTO p_id_producto, v_stock_actual
-        FROM COMPRAS_DETALLE WHERE id_compra = p_id_compra LIMIT 1;
-
-        -- 3 y 4. Restar las cantidades compradas del STOCK_DEPOSITO (validando stock suficiente)
-        CALL sp_actualizar_stock(p_id_deposito, p_id_producto, v_stock_actual, 'RESTAR');
-
-        -- 5. Si fue a crédito devolver el monto a PROVEEDORES.saldo_linea_credito
-        IF p_a_credito = TRUE THEN
-            UPDATE PROVEEDORES 
-            SET saldo_linea_credito = saldo_linea_credito + v_monto_total
-            WHERE id = p_id_proveedor;
+        IF v_cant_json = 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: Debe indicar en p_detalles_json los productos a modificar (cantidad y/o costo_unitario).';
         END IF;
 
-        -- 6. Cambiar id_estado = 4 (ANULADA) y saldo_factura = 0
-        UPDATE COMPRAS_CABECERA
-        SET id_estado = 4, saldo_factura = 0.00
-        WHERE id = p_id_compra;
+        -- Verificar que todos los productos enviados en el JSON realmente pertenezcan a esa compra
+        SELECT COUNT(*) INTO v_productos_invalidos
+        FROM JSON_TABLE(
+            p_detalles_json,
+            '$[*]' COLUMNS (id_producto INT UNSIGNED PATH '$.id_producto')
+        ) AS jt
+        LEFT JOIN COMPRAS_DETALLE cd
+            ON cd.id_compra = p_id_compra AND cd.id_producto = jt.id_producto
+        WHERE cd.id_detalle IS NULL;
 
-        -- 7. Registrar auditoria en bitacora
-        INSERT INTO BITACORA (nombre_tabla, operacion, id_usuario, fecha_hora, datos_nuevos)
-        VALUES ('COMPRAS_CABECERA', 'ANULAR', p_id_usuario, NOW(), 
-                CONCAT('{"id": ', p_id_compra, ', "estado: "ANULADA"}'));
-
-
-   /* ------------------------------------------------------------------
-    -- 3. Si es UPDATE
-    ------------------------------------------------------------------*/
-    ELSEIF p_operacion = 'UPDATE' THEN
-        
-        -- 1. Validar que no tenga pagos aplicados (saldo_factura == monto_total)
-        SELECT saldo_factura, monto_total, a_credito INTO v_saldo_factura, v_monto_total, p_a_credito
-        FROM COMPRAS_CABECERA WHERE id = p_id_compra;
-
-        IF p_a_credito = TRUE AND v_saldo_factura < v_monto_total THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: No se puede modificar una compra con pagos parciales aplicados.';
+        IF v_productos_invalidos > 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: Uno o más productos del JSON no existen en el detalle de esta compra.';
         END IF;
 
-        -- 2 y 3. Actualizar datos permitidos de la cabecera
-        UPDATE COMPRAS_CABECERA
-        SET numero_factura = p_numero_factura,
-            timbrado = p_timbrado,
-            fecha_vencimiento = p_fecha_vencimiento
-        WHERE id = p_id_compra;
+        -- Actualizar cantidad y/o costo _unitario
+        -- si no hay dato (null) en el JSON se conserva el valor anterior
+        UPDATE COMPRAS_DETALLE cd
+        INNER JOIN JSON_TABLE(
+            p_detalles_json,
+            '$[*]' COLUMNS (
+                id_producto    INT UNSIGNED  PATH '$.id_producto',
+                cantidad       DECIMAL(12,2) PATH '$.cantidad',
+                costo_unitario DECIMAL(12,2) PATH '$.costo_unitario'
+            )
+        ) AS jt ON cd.id_compra = p_id_compra AND cd.id_producto = jt.id_producto
+        SET cd.cantidad       = COALESCE(jt.cantidad, cd.cantidad),
+            cd.costo_unitario = COALESCE(jt.costo_unitario, cd.costo_unitario);
 
-        -- 5. Registrar auditoría en bitacora
-        INSERT INTO BITACORA (nombre_tabla, operacion, id_usuario, fecha_hora, datos_nuevos)
-        VALUES ('COMPRAS_CABECERA', 'UPDATE', p_id_usuario, NOW(), 
-                CONCAT('{"id": ', p_id_compra, ', "accion": "MODIFICACION"}'));
+    -- ========================================================================
+    -- 3. DELETE (Borrado lógico de cabecera o físico de detalles)
+    -- ========================================================================
+    ELSEIF v_op = 'DELETE' THEN
+        IF p_id_compra IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: Debe indicar p_id_compra para realizar la baja.';
+        END IF;
+
+        SELECT COUNT(*) INTO v_existe FROM COMPRAS_CABECERA WHERE id = p_id_compra;
+        IF v_existe = 0 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: La compra especificada no existe.';
+        END IF;
+
+        IF v_cant_json = 0 THEN -- borrado lógico de la factura completa, pasa a estado 4 (ANULADA)
+            UPDATE COMPRAS_CABECERA
+            SET id_estado = 4
+            WHERE id = p_id_compra;
+            
+        ELSE -- Borrado físico de lineas específicas del detalle
+            SELECT COUNT(*) INTO v_productos_invalidos
+            FROM JSON_TABLE(
+                p_detalles_json,
+                '$[*]' COLUMNS (id_producto INT UNSIGNED PATH '$.id_producto')
+            ) AS jt
+            LEFT JOIN COMPRAS_DETALLE cd
+                ON cd.id_compra = p_id_compra AND cd.id_producto = jt.id_producto
+            WHERE cd.id_detalle IS NULL;
+
+            IF v_productos_invalidos > 0 THEN
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Error: Uno o más productos a eliminar no existen en el detalle de esta compra.';
+            END IF;
+
+            DELETE cd
+            FROM COMPRAS_DETALLE cd
+            INNER JOIN JSON_TABLE(
+                p_detalles_json,
+                '$[*]' COLUMNS (id_producto INT UNSIGNED PATH '$.id_producto')
+            ) AS jt ON cd.id_compra = p_id_compra AND cd.id_producto = jt.id_producto;
+        END IF;
 
     ELSE
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: Operación no válida.';
+        SET v_msg = CONCAT('Operación inválida: "', COALESCE(p_operacion, 'NULL'), '". Use INSERT, UPDATE o DELETE.');
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
     END IF;
 
     COMMIT;
 END //
+DELIMITER ;
 
-/*
-INICIO TRANSACCIÓN (START TRANSACTION)
- │
- ├── SI p_operacion = 'INSERT':
- │     1. Validar si es a crédito y si la fecha_vencimiento >= fecha_compra.
- │     2. Validar que la compra no exceda la linea_credito del proveedor.
- │     3. Insertar COMPRAS_CABECERA (con id_estado = 1 'PENDIENTE' o 2 'PAGADA').
- │     4. Iterar sobre p_detalles_json:
- │          - Insertar COMPRAS_DETALLE.
- │          - Incrementar STOCK_DEPOSITO en id_deposito_ingreso.
- │     5. Actualizar monto_total y saldo_factura en COMPRAS_CABECERA.
- │     6. Si es a crédito, descontar de PROVEEDORES.saldo_linea_credito.
- │     7. Registrar auditoría en BITACORA.
- │
- ├── SI p_operacion = 'ANULAR':
- │     1. Validar que la compra exista y no esté ya 'ANULADA'.
- │     2. Validar que saldo_factura == monto_total (sin pagos aplicados).
- │     3. Validar que haya stock suficiente en id_deposito_ingreso para revertir.
- │     4. Restar las cantidades compradas del STOCK_DEPOSITO.
- │     5. Si fue a crédito, devolver el monto a PROVEEDORES.saldo_linea_credito.
- │     6. Cambiar id_estado = 4 ('ANULADA') y saldo_factura = 0.00.
- │     7. Registrar auditoría en BITACORA.
- │
- └── SI p_operacion = 'UPDATE':
-       1. Validar que no tenga pagos aplicados (saldo_factura == monto_total).
-       2. Revertir el stock y saldo de línea anteriores (como un rollback temporal).
-       3. Reemplazar los registros en COMPRAS_DETALLE con el nuevo JSON.
-       4. Aplicar el nuevo stock, recalcular monto_total y ajustar saldo_linea_credito.
-       5. Registrar auditoría en BITACORA.
-
-SI OCURRE UN ERROR -> ROLLBACK
-SI TODO ES CORRECTO -> COMMIT
-*/
 
 -- --------------------------------------------------------------------------------
 /* 
@@ -309,66 +336,16 @@ SI TODO ES CORRECTO -> COMMIT
 */
 -- --------------------------------------------------------------------------------
 
-
--- ============================================================================
--- SCRIPT DE PROCEDIMIENTOS ALMACENADOS AUXILIARES (MYSQL)
--- ============================================================================
-
--- --------------------------------------------------------------------------------
-/* 
-  1. Procedimientos almacenados adicionales (ABM)
-*/
--- --------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_registrar_orden_pago //
-
-CREATE PROCEDURE sp_registrar_orden_pago(
-    IN p_id_proveedor INT,
-    IN p_fecha DATE,
-    IN p_monto_total DECIMAL(15,2),
-    OUT p_id_orden INT
-)
-BEGIN
-    INSERT INTO ORDENES_DE_PAGO (id_proveedor, fecha, monto_total)
-    VALUES (p_id_proveedor, p_fecha, p_monto_total);
-    
-    SET p_id_orden = LAST_INSERT_ID();
-END //
-
-DROP PROCEDURE IF EXISTS sp_registrar_orden_pago_factura //
-
-CREATE PROCEDURE sp_registrar_orden_pago_factura(
-    IN p_id_orden_de_pago INT,
-    IN p_id_compra INT,
-    IN p_monto_pagado DECIMAL(15,2)
-)
-BEGIN
-    DECLARE v_id_proveedor INT;
-
-    INSERT INTO ORDEN_DE_PAGO_FACTURAS (id_orden_de_pago, id_compra, monto_pagado)
-    VALUES (p_id_orden_de_pago, p_id_compra, p_monto_pagado);
-    
-    UPDATE COMPRAS_CABECERA
-    SET saldo_factura = saldo_factura - p_monto_pagado
-    WHERE id = p_id_compra;
-    
-    UPDATE COMPRAS_CABECERA
-    SET id_estado = 2 -- PAGADA
-    WHERE id = p_id_compra AND saldo_factura <= 0;
-    
-    SELECT id_proveedor INTO v_id_proveedor FROM ORDENES_DE_PAGO WHERE id = p_id_orden_de_pago;
-    
-    UPDATE PROVEEDORES
-    SET saldo_linea_credito = saldo_linea_credito + p_monto_pagado
-    WHERE id = v_id_proveedor;
-END //
+-- Se ubica en el archivo consultas.sql, número 7.
 
 
 -- --------------------------------------------------------------------------------
 /* 
-  2. Funciones / procedimientos para manejo de stock
+  Función / procedimiento para manejo de stock
 */
 -- --------------------------------------------------------------------------------
 
+DELIMITER //
 DROP PROCEDURE IF EXISTS sp_actualizar_stock //
 CREATE PROCEDURE sp_actualizar_stock(
     IN p_id_deposito INT UNSIGNED,
@@ -422,6 +399,4 @@ BEGIN
         END IF;
     END IF;
 END //
-
-
 DELIMITER ;
