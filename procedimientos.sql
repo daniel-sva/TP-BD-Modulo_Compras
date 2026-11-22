@@ -355,20 +355,20 @@ CREATE PROCEDURE sp_actualizar_stock(
 )
 BEGIN
     DECLARE v_existe INT DEFAULT 0;
-    DECLARE stock DECIMAL(12,2) DEFAULT 0.00; -- modif 19 nov (int a decimal)
+    DECLARE stock DECIMAL(12,2) DEFAULT 0.00;
 
-    IF p_cantidad IS NULL OR p_cantidad < 0.00 THEN -- agregado 19 nov
+    IF p_cantidad IS NULL OR p_cantidad < 0.00 THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: La cantidad para actualizar el stock no puede ser negativa ni nula.';
     END IF;
 
-    IF p_operacion IS NULL OR p_operacion NOT IN ('SUMAR', 'RESTAR') THEN -- agregado 19 nov
+    IF p_operacion IS NULL OR p_operacion NOT IN ('SUMAR', 'RESTAR') THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: Operación de stock no válida (use SUMAR o RESTAR).';
     END IF;
 
-    IF p_cantidad > 0.00 THEN -- agregado 19 nov
-        SELECT COUNT(*), COALESCE(MAX(cantidad), 0.00) -- modif 19 nov (anterior: SELECT COUNT(*), cantidad)
+    IF p_cantidad > 0.00 THEN
+        SELECT COUNT(*), COALESCE(MAX(cantidad), 0.00)
         INTO v_existe, stock 
         FROM STOCK_DEPOSITO 
         WHERE id_deposito = p_id_deposito AND id_producto = p_id_producto;
@@ -387,12 +387,12 @@ BEGIN
                 SET cantidad = cantidad + p_cantidad
                 WHERE id_deposito = p_id_deposito AND id_producto = p_id_producto;
             ELSEIF p_operacion = 'RESTAR' THEN
-                IF p_cantidad <= stock THEN -- if modificado 19 nov
+                IF p_cantidad <= stock THEN
                     UPDATE STOCK_DEPOSITO 
                     SET cantidad = cantidad - p_cantidad
                     WHERE id_deposito = p_id_deposito AND id_producto = p_id_producto;
                 ELSE
-                    SIGNAL SQLSTATE '45000' -- agregado 19 nov
+                    SIGNAL SQLSTATE '45000'
                     SET MESSAGE_TEXT = 'Error: Stock insuficiente en el depósito para realizar la operación.';
                 END IF;
             END IF;

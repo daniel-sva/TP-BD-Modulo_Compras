@@ -139,7 +139,7 @@ END //
 
 /*
     BEFORE UPDATE
-    - Mantiene inmutables id_deposito e id_producto. (modifcado 18 nov)
+    - Mantiene inmutables id_deposito e id_producto.
     - Control de stock no negativo.
 */
 DROP TRIGGER IF EXISTS trg_stock_deposito_before_update //
@@ -147,8 +147,8 @@ CREATE TRIGGER trg_stock_deposito_before_update
 BEFORE UPDATE ON STOCK_DEPOSITO
 FOR EACH ROW
 BEGIN
-    SET NEW.id_deposito = OLD.id_deposito; -- anhadido 18 nov
-    SET NEW.id_producto = OLD.id_producto; -- anhadido 18 nov
+    SET NEW.id_deposito = OLD.id_deposito;
+    SET NEW.id_producto = OLD.id_producto;
 
     IF NEW.cantidad < 0.00 THEN
         SIGNAL SQLSTATE '45000'

@@ -1,7 +1,4 @@
 USE modulo_compras;
--- tamanhos variables de msg sqlstate pueden superar limite
-
--- preguntar: revertir ordenes de pago para anular facturas
 
 -- Flujo: registrar productos -> crear cabecera (monto y saldo mutables, no borrable) -> registrar detalles (inmutables, no borrables)
 

@@ -20,15 +20,15 @@ FOR EACH ROW
 BEGIN
     DECLARE id_rol_encargado INT UNSIGNED;
     DECLARE id_rol_autorizante INT UNSIGNED;
-    DECLARE v_activo_encargado BOOLEAN; -- agregado 19 nov
-    DECLARE v_activo_autorizante BOOLEAN; -- agregado 19 nov
+    DECLARE v_activo_encargado BOOLEAN;
+    DECLARE v_activo_autorizante BOOLEAN;
 
-    SELECT id_rol, activo -- modif 19 nov (id_rol -> id_rol, activo)
+    SELECT id_rol, activo
     INTO id_rol_encargado, v_activo_encargado
     FROM USUARIOS
     WHERE id = NEW.id_usuario_encargado;
 
-    SELECT id_rol, activo -- modif 19 nov (id_rol -> id_rol, activo)
+    SELECT id_rol, activo
     INTO id_rol_autorizante, v_activo_autorizante
     FROM USUARIOS
     WHERE id = NEW.id_usuario_autorizante;
@@ -41,15 +41,15 @@ BEGIN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: La fecha de transferencia no puede ser posterior a la fecha actual.';
 
-    ELSEIF NEW.id_usuario_encargado = NEW.id_usuario_autorizante THEN -- agregado 19 nov
+    ELSEIF NEW.id_usuario_encargado = NEW.id_usuario_autorizante THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: El encargado y el autorizante de la transferencia deben ser usuarios distintos.';
 
-    ELSEIF v_activo_encargado = FALSE OR v_activo_autorizante = FALSE THEN -- agregado 19 nov
+    ELSEIF v_activo_encargado = FALSE OR v_activo_autorizante = FALSE THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: Tanto el usuario encargado como el autorizante deben estar activos.';
 
-    ELSEIF id_rol_encargado <> 3 OR id_rol_autorizante <> 4 THEN -- modif 19 nov (AND -> OR)
+    ELSEIF id_rol_encargado <> 3 OR id_rol_autorizante <> 4 THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: El usuario encargado o autorizante no posee el rol adecuado para la transferencia.';
     END IF;
@@ -71,7 +71,7 @@ BEGIN
         'TRANSFERENCIAS_CABECERA', 'INSERT', 3, NOW(),
         JSON_OBJECT('NULL', null),
         JSON_OBJECT('id',                     NEW.id,
-                    'fecha',                  NEW.fecha, -- modif 19 nov (NOW() -> NEW.fecha)
+                    'fecha',                  NEW.fecha,
                     'id_deposito_origen',     NEW.id_deposito_origen,
                     'id_deposito_destino',    NEW.id_deposito_destino,
                     'id_usuario_encargado',   NEW.id_usuario_encargado,
@@ -93,27 +93,27 @@ FOR EACH ROW
 BEGIN
     DECLARE id_rol_encargado INT UNSIGNED;
     DECLARE id_rol_autorizante INT UNSIGNED;
-    DECLARE v_activo_encargado BOOLEAN;   -- agregado 19 nov
-    DECLARE v_activo_autorizante BOOLEAN; -- agregado 19 nov
-    DECLARE v_tiene_detalles BOOLEAN; -- agregado 19 nov
+    DECLARE v_activo_encargado BOOLEAN;
+    DECLARE v_activo_autorizante BOOLEAN;
+    DECLARE v_tiene_detalles BOOLEAN;
 
-    SELECT id_rol, activo -- modif 19 nov (id_rol -> id_rol, activo)
+    SELECT id_rol, activo
     INTO id_rol_encargado, v_activo_encargado
     FROM USUARIOS
     WHERE id = NEW.id_usuario_encargado;
 
-    SELECT id_rol, activo -- modif 19 nov (id_rol -> id_rol, activo)
+    SELECT id_rol, activo
     INTO id_rol_autorizante, v_activo_autorizante
     FROM USUARIOS
     WHERE id = NEW.id_usuario_autorizante;
 
     SELECT EXISTS (
         SELECT 1 FROM TRANSFERENCIAS_DETALLE WHERE id_transferencia = OLD.id
-    ) INTO v_tiene_detalles; -- agregado 19 nov
+    ) INTO v_tiene_detalles;
 
     IF v_tiene_detalles = TRUE AND (NEW.id_deposito_origen <> OLD.id_deposito_origen OR NEW.id_deposito_destino <> OLD.id_deposito_destino) THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'Error: No se pueden modificar los depósitos de una transferencia que ya posee productos cargados.'; -- agregado 19 nov
+        SET MESSAGE_TEXT = 'Error: No se pueden modificar los depósitos de una transferencia que ya posee productos cargados.';
 
     ELSEIF NEW.id_deposito_origen = NEW.id_deposito_destino THEN
         SIGNAL SQLSTATE '45000'
@@ -127,7 +127,7 @@ BEGIN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: El encargado y el autorizante de la transferencia deben ser usuarios distintos.';
 
-    ELSEIF v_activo_encargado = FALSE OR v_activo_autorizante = FALSE THEN -- agregado 19 nov
+    ELSEIF v_activo_encargado = FALSE OR v_activo_autorizante = FALSE THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Error: Tanto el usuario encargado como el autorizante deben estar activos.';
 
@@ -152,13 +152,13 @@ BEGIN
     ) VALUES (
         'TRANSFERENCIAS_CABECERA', 'UPDATE', 3, NOW(),
         JSON_OBJECT('id',                     OLD.id,
-                    'fecha',                  OLD.fecha, -- modif 19 nov (NOW() -> NEW.fecha)
+                    'fecha',                  OLD.fecha,
                     'id_deposito_origen',     OLD.id_deposito_origen,
                     'id_deposito_destino',    OLD.id_deposito_destino,
                     'id_usuario_encargado',   OLD.id_usuario_encargado,
                     'id_usuario_autorizante', OLD.id_usuario_autorizante),
         JSON_OBJECT('id',                     NEW.id,
-                    'fecha',                  NEW.fecha, -- modif 19 nov (NOW() -> NEW.fecha)
+                    'fecha',                  NEW.fecha,
                     'id_deposito_origen',     NEW.id_deposito_origen,
                     'id_deposito_destino',    NEW.id_deposito_destino,
                     'id_usuario_encargado',   NEW.id_usuario_encargado,
@@ -171,7 +171,7 @@ END //
     BEFORE DELETE
     - Elimina primero los detalles asociados para disparar sus triggers para revertir stock y registrar en bitacora.
 */
-DROP TRIGGER IF EXISTS trg_transferencias_cabecera_before_delete // -- trigger agregado 19 nov
+DROP TRIGGER IF EXISTS trg_transferencias_cabecera_before_delete //
 CREATE TRIGGER trg_transferencias_cabecera_before_delete
 BEFORE DELETE ON TRANSFERENCIAS_CABECERA
 FOR EACH ROW
@@ -194,7 +194,7 @@ BEGIN
     ) VALUES (
         'TRANSFERENCIAS_CABECERA', 'DELETE', 3, NOW(),
         JSON_OBJECT('id',                     OLD.id,
-                    'fecha',                  OLD.fecha, -- modif 19 nov (NOW() -> NEW.fecha)
+                    'fecha',                  OLD.fecha,
                     'id_deposito_origen',     OLD.id_deposito_origen,
                     'id_deposito_destino',    OLD.id_deposito_destino,
                     'id_usuario_encargado',   OLD.id_usuario_encargado,
@@ -214,7 +214,7 @@ END //
     BEFORE INSERT
     - Verifica que el depósito origen disponga de stock suficiente antes de insertar el detalle.
 */
-DROP TRIGGER IF EXISTS trg_transferencias_detalle_before_insert // -- trigger agregado 19 nov
+DROP TRIGGER IF EXISTS trg_transferencias_detalle_before_insert //
 CREATE TRIGGER trg_transferencias_detalle_before_insert
 BEFORE INSERT ON TRANSFERENCIAS_DETALLE
 FOR EACH ROW
@@ -277,7 +277,7 @@ END //
     - Mantiene inmutables id_transferencia e id_producto.
     - Valida que exista stock suficiente en origen (si aumenta la cantidad) o en destino (si disminuye).
 */
-DROP TRIGGER IF EXISTS trg_transferencias_detalle_before_update // -- trigger agregado 19 nov
+DROP TRIGGER IF EXISTS trg_transferencias_detalle_before_update //
 CREATE TRIGGER trg_transferencias_detalle_before_update
 BEFORE UPDATE ON TRANSFERENCIAS_DETALLE
 FOR EACH ROW
@@ -343,7 +343,7 @@ BEGIN
         CALL sp_actualizar_stock(v_origen, NEW.id_producto, NEW.cantidad, 'RESTAR');
 
         CALL sp_actualizar_stock(v_destino, NEW.id_producto, NEW.cantidad, 'SUMAR');
-        CALL sp_actualizar_stock(v_destino, NEW.id_producto, OLD.cantidad, 'RESTAR'); -- modif 19 nov (1.restar, 2. sumar -> 1.sumar, 2.restar)
+        CALL sp_actualizar_stock(v_destino, NEW.id_producto, OLD.cantidad, 'RESTAR');
     END IF;
 
     INSERT INTO BITACORA (
@@ -366,7 +366,7 @@ END //
     BEFORE DELETE
     - Verifica que el depósito destino tenga stock suficiente para revertir la transferencia sin quedar en negativo.
 */
-DROP TRIGGER IF EXISTS trg_transferencias_detalle_before_delete // -- trigger agregado 19 nov
+DROP TRIGGER IF EXISTS trg_transferencias_detalle_before_delete //
 CREATE TRIGGER trg_transferencias_detalle_before_delete
 BEFORE DELETE ON TRANSFERENCIAS_DETALLE
 FOR EACH ROW

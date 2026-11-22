@@ -1,4 +1,4 @@
-DROP DATABASE modulo_compras;
+DROP DATABASE IF EXISTS modulo_compras;
 CREATE DATABASE modulo_compras;
 USE modulo_compras;
 
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS `PROVEEDORES` (
 	`telefono` VARCHAR(30),
 	`correo` VARCHAR(100),
 	`linea_credito` NUMERIC(15,2) NOT NULL DEFAULT 0.00,
-	`saldo_linea_credito` NUMERIC(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Este campo depende de las ordenes de pago, asi como saldo_factura de COMPRAS_CABECERA',
+	`saldo_linea_credito` NUMERIC(15,2) NOT NULL DEFAULT 0.00,
 	PRIMARY KEY(`id`),
     CONSTRAINT chk_ln_cr_positivo CHECK (linea_credito >= 0.00),
 	CONSTRAINT chk_sld_ln_cr_positivo CHECK (saldo_linea_credito >= 0.00),
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS `COMPRAS_CABECERA` (
 	`saldo_factura` DECIMAL(15,2) NOT NULL COMMENT 'Si a_cretido es "false" entonces saldo=0. Si es "true" saldo=monto',
 	`id_estado` INTEGER UNSIGNED NOT NULL,
 	PRIMARY KEY(`id`),
-	CONSTRAINT uq_factura_proveedor UNIQUE (id_proveedor, timbrado, numero_factura), -- agregado 30 de octubre
+	CONSTRAINT uq_factura_proveedor UNIQUE (id_proveedor, timbrado, numero_factura),
 	CONSTRAINT chk_fch_venc_coherente CHECK (fecha_vencimiento >= fecha_compra),
 	CONSTRAINT chk_monto_tot_positivo CHECK (monto_total >= 0.00),
 	CONSTRAINT chk_saldo_fact_positivo CHECK (saldo_factura >= 0.00),
@@ -116,9 +116,9 @@ CREATE TABLE IF NOT EXISTS `COMPRAS_DETALLE` (
 	PRIMARY KEY(`id_detalle`),
 	CONSTRAINT uq_compra_producto UNIQUE (id_compra, id_producto),
 	CONSTRAINT chk_cantidad_positivo_cd CHECK (cantidad > 0.00),
-	CONSTRAINT chk_costo_unit_positivo CHECK (costo_unitario > 0.00), -- modificado 1 de noviembre
+	CONSTRAINT chk_costo_unit_positivo CHECK (costo_unitario > 0.00),
 	CONSTRAINT chk_porc_iva_positivo CHECK (porcentaje_iva >= 0.00),
-	CONSTRAINT chk_subtotal CHECK (subtotal > 0.00) -- modificado 3 de noviembre
+	CONSTRAINT chk_subtotal CHECK (subtotal > 0.00)
 );
 
 
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS `TRANSFERENCIAS_DETALLE` (
 	`cantidad` NUMERIC(12,2) NOT NULL DEFAULT 0.00,
 	PRIMARY KEY(`id_detalle`),
 	CONSTRAINT chk_cantidad_positivo_td CHECK (cantidad > 0.00),
-	CONSTRAINT chk_prod_unico_p_transf UNIQUE (id_transferencia, id_producto) -- agregado 19 nov
+	CONSTRAINT chk_prod_unico_p_transf UNIQUE (id_transferencia, id_producto)
 );
 
 
@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS `ORDENES_DE_PAGO` (
 	`id_proveedor` INTEGER UNSIGNED NOT NULL,
 	`fecha` DATE NOT NULL,
 	`monto_total` DECIMAL(15,2) NOT NULL,
-	`confirmado` BOOLEAN NOT NULL DEFAULT FALSE, -- modif 18 nov
+	`confirmado` BOOLEAN NOT NULL DEFAULT FALSE,
 	PRIMARY KEY(`id`),
 	CONSTRAINT chk_mnt_tot_positivo CHECK (monto_total >= 0.00)
 );
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS `ORDEN_DE_PAGO_FORMAS` (
 	`id_orden_de_pago` INTEGER UNSIGNED NOT NULL,
 	`id_forma_de_pago` INTEGER UNSIGNED NOT NULL,
 	`monto_pagado` DECIMAL(15,2) NOT NULL,
-	`referencia` VARCHAR(100) COMMENT 'nro de cheque, nro de transferencia, etc.', -- pasado a nullable 14 nov
+	`referencia` VARCHAR(100) COMMENT 'nro de cheque, nro de transferencia, etc.',
 	PRIMARY KEY(`id`),
 	CONSTRAINT chk_mnt_pag_form_positivo CHECK (monto_pagado > 0.00)
 );

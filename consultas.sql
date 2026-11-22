@@ -17,7 +17,7 @@ SELECT
   SUM(c.monto_total) AS importe_total_compras
 FROM COMPRAS_CABECERA c
 INNER JOIN DEPOSITOS d ON c.id_deposito_ingreso = d.id
-WHERE c.fecha_compra BETWEEN '2026-09-05' AND '2026-09-15'
+WHERE c.fecha_compra BETWEEN '2026-11-05' AND '2026-11-15'
   AND c.id_estado <> 4
 GROUP BY c.fecha_compra, d.id, d.nombre
 ORDER BY c.fecha_compra ASC;
@@ -41,7 +41,7 @@ FROM
 WHERE
   pr.id BETWEEN 1 AND 5
   AND
-  c.fecha_compra BETWEEN '2026-09-01' AND '2026-09-30'
+  c.fecha_compra BETWEEN '2026-10-15' AND '2026-11-09'
   AND c.id_estado <> 4
 GROUP BY pr.id, pr.nombre_razon_social, p.id, p.descripcion, p.ultimo_costo_unitario
 ORDER BY pr.id, p.id;
@@ -177,7 +177,7 @@ BEGIN
 END //
 DELIMITER ;
 
-CALL ProductosNoCompradosEntreFechas('2026-09-10', '2026-09-16');
+CALL ProductosNoCompradosEntreFechas('2026-11-02', '2026-11-05');
 
 /*
 DELIMITER //

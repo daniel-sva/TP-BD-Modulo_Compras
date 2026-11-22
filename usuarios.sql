@@ -20,8 +20,6 @@ GRANT SELECT ON modulo_compras.VISTA_FACTURAS_PROVEEDORES_VENCIDAS        TO 'ma
 GRANT SELECT ON modulo_compras.VISTA_PROVEEDORES_LINEA_CREDITO            TO 'maria_compras'@'localhost';
 
 
-
-
 -- PERMISOS PARA USUARIO 2: juan_deposito (Módulo Productos, Stock y Transferencias)
 GRANT SELECT, INSERT, UPDATE, DELETE ON modulo_compras.PRODUCTOS               TO 'juan_deposito'@'localhost';
 GRANT SELECT, INSERT, UPDATE, DELETE ON modulo_compras.DEPOSITOS               TO 'juan_deposito'@'localhost';
